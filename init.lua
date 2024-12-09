@@ -91,7 +91,7 @@ vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 
 -- Set to true if you have a Nerd Font installed and selected in the terminal
-vim.g.have_nerd_font = false
+vim.g.have_nerd_font = true
 
 -- [[ Setting options ]]
 -- See `:help vim.opt`
@@ -114,9 +114,9 @@ vim.opt.showmode = false
 --  Schedule the setting after `UiEnter` because it can increase startup-time.
 --  Remove this option if you want your OS clipboard to remain independent.
 --  See `:help 'clipboard'`
-vim.schedule(function()
-  vim.opt.clipboard = 'unnamedplus'
-end)
+-- vim.schedule(function()
+--  vim.opt.clipboard = 'unnamedplus'
+-- end)
 
 -- Enable break indent
 vim.opt.breakindent = true
@@ -176,10 +176,10 @@ vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagn
 vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 
 -- TIP: Disable arrow keys in normal mode
--- vim.keymap.set('n', '<left>', '<cmd>echo "Use h to move!!"<CR>')
--- vim.keymap.set('n', '<right>', '<cmd>echo "Use l to move!!"<CR>')
--- vim.keymap.set('n', '<up>', '<cmd>echo "Use k to move!!"<CR>')
--- vim.keymap.set('n', '<down>', '<cmd>echo "Use j to move!!"<CR>')
+vim.keymap.set('n', '<left>', '<cmd>echo "Use h to move!!"<CR>')
+vim.keymap.set('n', '<right>', '<cmd>echo "Use l to move!!"<CR>')
+vim.keymap.set('n', '<up>', '<cmd>echo "Use k to move!!"<CR>')
+vim.keymap.set('n', '<down>', '<cmd>echo "Use j to move!!"<CR>')
 
 -- Keybinds to make split navigation easier.
 --  Use CTRL+<hjkl> to switch between windows
@@ -189,6 +189,13 @@ vim.keymap.set('n', '<C-h>', '<C-w><C-h>', { desc = 'Move focus to the left wind
 vim.keymap.set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
 vim.keymap.set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
 vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
+
+-- My OWN keybindings
+vim.api.nvim_set_keymap('n', '<leader>c', '<cmd>BD<cr>', { noremap = true, silent = true, desc = 'Close current buffer' })
+vim.api.nvim_set_keymap('n', ',§', '<cmd>tabnew<cr>', { noremap = true, silent = true, desc = 'Open a new tab' })
+vim.api.nvim_set_keymap('n', ',<tab>', '<cmd>tabnext<cr>', { noremap = true, silent = true, desc = 'Jump to next tab' })
+vim.api.nvim_set_keymap('n', ',<s-tab>', '<cmd>tabprev<cr>', { noremap = true, silent = true, desc = 'Jump to previous tab' })
+vim.api.nvim_set_keymap('i', '<C-l>', '<Space>=><Space>', { noremap = true, silent = true, desc = 'Insert hashrocket' })
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
@@ -576,6 +583,22 @@ require('lazy').setup({
             })
           end
 
+          if client then
+            local codelens_augroup = vim.api.nvim_create_augroup('kickstart-lsp-codelens', { clear = false })
+            vim.api.nvim_create_autocmd({ 'BufEnter', 'CursorHold', 'InsertLeave' }, {
+              buffer = event.buf,
+              group = codelens_augroup,
+              callback = vim.lsp.codelens.refresh,
+            })
+
+            vim.api.nvim_create_autocmd('LspDetach', {
+              group = vim.api.nvim_create_augroup('kickstart-lsp-detach', { clear = true }),
+              callback = function(event2)
+                vim.api.nvim_clear_autocmds { group = 'kickstart-lsp-codelens', buffer = event2.buf }
+              end,
+            })
+          end
+
           -- The following code creates a keymap to toggle inlay hints in your
           -- code, if the language server you are using supports them
           --
@@ -585,18 +608,20 @@ require('lazy').setup({
               vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf })
             end, '[T]oggle Inlay [H]ints')
           end
+
+          vim.lsp.codelens.refresh()
         end,
       })
 
       -- Change diagnostic symbols in the sign column (gutter)
-      -- if vim.g.have_nerd_font then
-      --   local signs = { ERROR = '', WARN = '', INFO = '', HINT = '' }
-      --   local diagnostic_signs = {}
-      --   for type, icon in pairs(signs) do
-      --     diagnostic_signs[vim.diagnostic.severity[type]] = icon
-      --   end
-      --   vim.diagnostic.config { signs = { text = diagnostic_signs } }
-      -- end
+      if vim.g.have_nerd_font then
+        local signs = { ERROR = '', WARN = '', INFO = '', HINT = '' }
+        local diagnostic_signs = {}
+        for type, icon in pairs(signs) do
+          diagnostic_signs[vim.diagnostic.severity[type]] = icon
+        end
+        vim.diagnostic.config { signs = { text = diagnostic_signs } }
+      end
 
       -- LSP servers and clients are able to communicate to each other what features they support.
       --  By default, Neovim doesn't support everything that is in the LSP specification.
@@ -615,6 +640,31 @@ require('lazy').setup({
       --  - settings (table): Override the default settings passed when initializing the server.
       --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
+        elixirls = {
+          settings = {
+            elixirLS = {
+              dialyzerEnabled = true,
+              suggestSpecs = true,
+              enableTestLenses = true,
+              signatureAfterComplete = true,
+            },
+          },
+        },
+        tailwindcss = {
+          root_dir = function(fname)
+            local util = require 'lspconfig/util'
+            return util.root_pattern('assets/tailwind.config.js', 'tailwind.config.js', 'tailwind.config.cjs', 'tailwind.js', 'tailwind.cjs')(fname)
+          end,
+
+          settings = {
+            tailwindCSS = {
+              includeLanguages = {
+                heex = 'html',
+                elixir = 'html',
+              },
+            },
+          },
+        },
         -- clangd = {},
         -- gopls = {},
         -- pyright = {},
@@ -829,6 +879,7 @@ require('lazy').setup({
           { name = 'nvim_lsp' },
           { name = 'luasnip' },
           { name = 'path' },
+          { name = 'buffer' },
         },
       }
     end,
@@ -839,16 +890,19 @@ require('lazy').setup({
     -- change the command in the config to whatever the name of that colorscheme is.
     --
     -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-    'folke/tokyonight.nvim',
+    'Hermanverschooten/herman_colorscheme.nvim',
     priority = 1000, -- Make sure to load this before all the other start plugins.
     init = function()
       -- Load the colorscheme here.
       -- Like many other themes, this one has different styles, and you could load
       -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'tokyonight-night'
+      vim.cmd.colorscheme 'herman-colorscheme'
 
       -- You can configure highlights by doing something like:
       vim.cmd.hi 'Comment gui=none'
+    end,
+    config = function()
+      vim.g.herman_colorscheme_style = 'dark'
     end,
   },
 
@@ -864,7 +918,6 @@ require('lazy').setup({
       --  - va)  - [V]isually select [A]round [)]paren
       --  - yinq - [Y]ank [I]nside [N]ext [Q]uote
       --  - ci'  - [C]hange [I]nside [']quote
-      require('mini.ai').setup { n_lines = 500 }
 
       -- Add/delete/replace surroundings (brackets, quotes, etc.)
       --
@@ -890,6 +943,7 @@ require('lazy').setup({
 
       -- ... and there is more!
       --  Check out: https://github.com/echasnovski/mini.nvim
+      require('mini.git').setup()
     end,
   },
   { -- Highlight, edit, and navigate code
@@ -898,7 +952,7 @@ require('lazy').setup({
     main = 'nvim-treesitter.configs', -- Sets main module to use for opts
     -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
     opts = {
-      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
+      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'heex', 'elixir' },
       -- Autoinstall languages that are not installed
       auto_install = true,
       highlight = {
@@ -927,18 +981,18 @@ require('lazy').setup({
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
-  -- require 'kickstart.plugins.debug',
-  -- require 'kickstart.plugins.indent_line',
-  -- require 'kickstart.plugins.lint',
-  -- require 'kickstart.plugins.autopairs',
-  -- require 'kickstart.plugins.neo-tree',
-  -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  require 'kickstart.plugins.debug',
+  require 'kickstart.plugins.indent_line',
+  require 'kickstart.plugins.lint',
+  require 'kickstart.plugins.autopairs',
+  require 'kickstart.plugins.neo-tree',
+  require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
+  { import = 'custom.plugins' },
   --
   -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
   -- Or use telescope!
